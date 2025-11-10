@@ -11,10 +11,8 @@ OUTPUT_XLSX = r"C:\Users\franco.olivero\Downloads\pythonUtilities\AXIS_ATI_Autom
 # ----------------------------------------------------
 
 def sanitize_sheet_name(name: str) -> str:
-    """
-    Excel sheet name rules: max 31 chars; cannot contain : \ / ? * [ ]
-    Also avoid leading/trailing apostrophes.
-    """
+    # Excel sheet name rules: max 31 chars; cannot contain : \ / ? * [ ]
+    # Also avoid leading/tailing apostrophes.
     if name is None:
         name = "Sheet"
     name = str(name)
@@ -22,8 +20,17 @@ def sanitize_sheet_name(name: str) -> str:
     name = name.replace("'", "’")
     return name[:31] if len(name) > 31 else name
 
+# short module names for sheet naming
+MODULE_SHORT = {
+    "Regular Life": "RL",
+    "Universal Life": "UL",
+    "Disability": "DI",
+    "Annuities": "AN"
+}
+
 def build_sheet_name(module, tbl_type, usage_type, tbl_name):
-    base = f"{module} | {tbl_type} | {usage_type} | {tbl_name}"
+    module_short = MODULE_SHORT.get(module, module)
+    base = f"{module_short} | {tbl_type} | {usage_type} | {tbl_name}"
     return sanitize_sheet_name(base)
 
 def ensure_columns(df: pd.DataFrame, cols):
@@ -45,9 +52,9 @@ def concat_unique(values, sep=", "):
 
 def main():
     # Read CSV: keep raw as string to avoid silent coercions; we’ll explicitly convert selected cols.
-    df = pd.read_csv(INPUT_CSV, dtype=str).fillna("")
+    df = pd.read_csv(INPUT_CSV, dtype=str, encoding='latin1').fillna("") # le tuve que agregar encoding para que ande en mi compu, habría que ver dónde va a pasar esto
     # Trim whitespace
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x) # cambiar applymap por solo map
 
     # Identify C# columns
     c_cols = [c for c in df.columns if re.fullmatch(r"C\d{1,3}", c)]
@@ -59,7 +66,7 @@ def main():
         "FORMULA", "Name", "Obj Name", "Used By", "Module", "Table Type", "Table_Usage_Type"
     ]
 
-    ensure_columns(df, base_cols)
+    ensure_columns(df, base_cols) # check required columns
 
     # Coerce Row to Int64 (nullable)
     df["Row"] = coerce_row_to_int(df["Row"])
@@ -98,6 +105,18 @@ def main():
             if not str(tbl_name).strip():
                 continue
 
+            # skip age distribution tables
+            if isinstance(tbl_type, str) and tbl_type.strip().lower() == "age distribution":
+                print(f"Skipping Age Distribution table: {tbl_name}")
+                continue
+            
+            # delete duplicates
+            sub = sub.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            # drop duplicates in Row column
+            sub = sub.drop_duplicates(
+                subset=[c for c in sub.columns if c not in ["Used By", "Obj Name"]]
+            ).copy()
+
             # Compose desired sheet name and ensure uniqueness within 31 chars
             raw_sheet = build_sheet_name(module, tbl_type, usage_type, tbl_name)
             sheet_name = raw_sheet
@@ -119,7 +138,7 @@ def main():
                 ["Table_Usage_Type", usage_type],
                 ["Section(s)", section_val],
                 ["Shape(s)", shape_vals],
-                ["TableName", tbl_name],
+                ["Table Name", tbl_name],
                 ["Used By", used_by_val],
                 ["Obj Name(s)", obj_names_all],
             ]
@@ -220,8 +239,11 @@ def main():
                 idx_ws.write_url(i + 1, 4, f"internal:'{row['Sheet']}'!A1", string="Open")
             idx_ws.set_column(0, 3, 28)
             idx_ws.set_column(4, 4, 10)
+            idx_ws.freeze_panes(1, 0)
 
     print(f"Done. Wrote: {OUTPUT_XLSX}")
 
 if __name__ == "__main__":
     main()
+
+    
