@@ -14,10 +14,10 @@ ROOT_DIR = os.path.dirname(BASE_DIR)
 
 # Build paths
 INPUT_DIR = os.path.join(ROOT_DIR, "01_Input")
-OUTPUT_DIR = os.path.join(ROOT_DIR, "02_Process")  # optional, if saving here
+OUTPUT_DIR = os.path.join(ROOT_DIR, "03_Output")
 
 INPUT_CSV  = os.path.join(INPUT_DIR, "ATI_Regular_Life.csv")
-OUTPUT_XLSX = os.path.join(OUTPUT_DIR, "Tables_By_Section.xlsx")
+OUTPUT_XLSX = os.path.join(OUTPUT_DIR, "ATI_Summary_v1.1.xlsx")
 # ----------------------------------------------------
 
 def sanitize_sheet_name(name: str) -> str:
@@ -63,8 +63,9 @@ def concat_unique(values, sep=", "):
 def main():
     # Read CSV: keep raw as string to avoid silent coercions; we’ll explicitly convert selected cols.
     df = pd.read_csv(INPUT_CSV, dtype=str).fillna("") # le tuve que agregar encoding='latin1' para que ande en mi compu, habría que ver dónde va a pasar esto
+    
     # Trim whitespace
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x) # cambiar applymap por solo map
+    df = df.apply(lambda col: col.str.strip())
 
     # Identify C# columns
     c_cols = [c for c in df.columns if re.fullmatch(r"C\d{1,3}", c)]
@@ -91,7 +92,6 @@ def main():
 
     # Group by the hierarchy for sheet creation (one sheet per TableName)
     groups = df_sorted.groupby(["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape"], dropna=False)
-    print(groups)
 
     # Track used sheet names to avoid duplicates after sanitization/truncation
     name_counts = defaultdict(int)
@@ -121,8 +121,6 @@ def main():
                 print(f"Skipping Age Distribution table: {tbl_name}")
                 continue
             
-            # delete duplicates
-            sub = sub.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             # drop duplicates in Row column
             sub = sub.drop_duplicates(
                 subset=[c for c in sub.columns if c not in ["Used By", "Obj Name"]]
@@ -182,10 +180,12 @@ def main():
             # Keep only until the last non-all-empty C# column for this TableName to avoid writing tons of empty columns
             # Determine used C# columns
             used_c_cols = []
+            
             for c in c_cols:
                 colvals = tbl[c]
-                if not (colvals.replace("", np.nan)).isna().all():
+                if not (colvals.fillna("").eq("").all()): # if not all empty then the column is used
                     used_c_cols.append(c)
+            
             if not used_c_cols:
                 used_c_cols = []  # If none used, don't write them
             table_final_cols = ["Row"] + used_c_cols
@@ -224,7 +224,7 @@ def main():
             bold = wb.add_format({"bold": True})
             ws.set_column(0, 0, 24, bold)      # Field / first column
             ws.set_column(1, 1, 60)            # Value / second column
-            ws.set_zoom(120)
+            ws.set_zoom(100)
 
             # Add entry for Index sheet (hyperlink)
             index_rows.append({
