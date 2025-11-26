@@ -6,8 +6,18 @@ import numpy as np
 import pandas as pd
 
 # ---------------------- CONFIG ----------------------
-INPUT_CSV  = r"C:\Users\evidal\OneDrive - ARM\Documents\Clients\Obra\auto\assumption_tables\ATI_Regular_Life.csv"             
-OUTPUT_XLSX = r"C:\Users\evidal\OneDrive - ARM\Desktop\Output.xlsx" 
+# Get the directory where the Python script lives
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Move one folder up (to DMI_AATIA)
+ROOT_DIR = os.path.dirname(BASE_DIR)
+
+# Build paths
+INPUT_DIR = os.path.join(ROOT_DIR, "01_Input")
+OUTPUT_DIR = os.path.join(ROOT_DIR, "02_Process")  # optional, if saving here
+
+INPUT_CSV  = os.path.join(INPUT_DIR, "ATI_Regular_Life.csv")
+OUTPUT_XLSX = os.path.join(OUTPUT_DIR, "Tables_By_Section.xlsx")
 # ----------------------------------------------------
 
 def sanitize_sheet_name(name: str) -> str:
@@ -52,7 +62,7 @@ def concat_unique(values, sep=", "):
 
 def main():
     # Read CSV: keep raw as string to avoid silent coercions; we’ll explicitly convert selected cols.
-    df = pd.read_csv(INPUT_CSV, dtype=str, encoding='latin1').fillna("") # le tuve que agregar encoding para que ande en mi compu, habría que ver dónde va a pasar esto
+    df = pd.read_csv(INPUT_CSV, dtype=str).fillna("") # le tuve que agregar encoding='latin1' para que ande en mi compu, habría que ver dónde va a pasar esto
     # Trim whitespace
     df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x) # cambiar applymap por solo map
 
