@@ -38,9 +38,9 @@ MODULE_SHORT = {
     "Annuities": "AN"
 }
 
-def build_sheet_name(module, tbl_type, usage_type, tbl_name):
+def build_sheet_name(module, tbl_type, usage_type, tbl_name, section, shape):
     module_short = MODULE_SHORT.get(module, module)
-    base = f"{module_short} | {tbl_type} | {usage_type} | {tbl_name}"
+    base = f"{module_short} | {section} | {tbl_name}"
     return sanitize_sheet_name(base)
 
 def ensure_columns(df: pd.DataFrame, cols):
@@ -82,15 +82,16 @@ def main():
     df["Row"] = coerce_row_to_int(df["Row"])
 
     # Build ordering keys (None -> empty)
-    for col in ["Module", "Table Type", "Table_Usage_Type", "TableName"]:
+    for col in ["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape"]:
         df[col] = df[col].fillna("").astype(str)
 
     # Sort for stable sheet order: Module, Table Type, Usage, TableName, Row
-    sort_cols = ["Module", "Table Type", "Table_Usage_Type", "TableName", "Row"]
+    sort_cols = ["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape", "Row"]
     df_sorted = df.sort_values(sort_cols, na_position="last").reset_index(drop=True)
 
     # Group by the hierarchy for sheet creation (one sheet per TableName)
-    groups = df_sorted.groupby(["Module", "Table Type", "Table_Usage_Type", "TableName"], dropna=False)
+    groups = df_sorted.groupby(["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape"], dropna=False)
+    print(groups)
 
     # Track used sheet names to avoid duplicates after sanitization/truncation
     name_counts = defaultdict(int)
@@ -102,7 +103,7 @@ def main():
         wb = xw.book
 
         # Create Index sheet first
-        idx_df = pd.DataFrame(columns=["Module", "Table Type", "Table_Usage_Type", "TableName", "Link"])
+        idx_df = pd.DataFrame(columns=["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape", "Link"])
         idx_sheet = "Index"
         idx_sheet_safe = sanitize_sheet_name(idx_sheet)
         idx_df.to_excel(xw, sheet_name=idx_sheet_safe, index=False, startrow=0)
@@ -110,7 +111,7 @@ def main():
         # We'll add hyperlinks after sheets are created
         row_in_index = 1  # 0-based writing with header at row 0 ⇒ first data row = 1
 
-        for (module, tbl_type, usage_type, tbl_name), sub in groups:
+        for (module, tbl_type, usage_type, tbl_name, section, shape), sub in groups:
             # Skip empty TableName (if any)
             if not str(tbl_name).strip():
                 continue
@@ -128,7 +129,7 @@ def main():
             ).copy()
 
             # Compose desired sheet name and ensure uniqueness within 31 chars
-            raw_sheet = build_sheet_name(module, tbl_type, usage_type, tbl_name)
+            raw_sheet = build_sheet_name(module, tbl_type, usage_type, tbl_name, section, shape)
             sheet_name = raw_sheet
             if name_counts[sheet_name] > 0:
                 # Append a counter while respecting 31-char limit
@@ -231,22 +232,24 @@ def main():
                 "Table Type": tbl_type,
                 "Table_Usage_Type": usage_type,
                 "TableName": tbl_name,
+                "Section": section,
+                "Shape": shape,
                 "Sheet": sheet_name  # keep for hyperlink writing
             })
 
         # Write hyperlinks into Index sheet
         if index_rows:
-            idx = pd.DataFrame(index_rows).sort_values(["Module", "Table Type", "Table_Usage_Type", "TableName"]).reset_index(drop=True)
+            idx = pd.DataFrame(index_rows).sort_values(["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape"]).reset_index(drop=True)
             # Rewrite the table (excluding the helper "Sheet" column)
-            printable = idx[["Module", "Table Type", "Table_Usage_Type", "TableName"]]
+            printable = idx[["Module", "Table Type", "Table_Usage_Type", "TableName", "Section", "Shape"]]
             printable.to_excel(xw, sheet_name=idx_sheet_safe, index=False, startrow=0)
             idx_ws = xw.sheets[idx_sheet_safe]
 
             # Add hyperlinks in a 5th column "Link"
-            idx_ws.write(0, 4, "Link")
+            idx_ws.write(0, 6, "Link")
             for i, row in idx.iterrows():
                 # Hyperlink to A1 in the target sheet
-                idx_ws.write_url(i + 1, 4, f"internal:'{row['Sheet']}'!A1", string="Open")
+                idx_ws.write_url(i + 1, 6, f"internal:'{row['Sheet']}'!A1", string="Open")
             idx_ws.set_column(0, 3, 28)
             idx_ws.set_column(4, 4, 10)
             idx_ws.freeze_panes(1, 0)
@@ -255,5 +258,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    
